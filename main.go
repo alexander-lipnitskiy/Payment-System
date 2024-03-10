@@ -73,18 +73,12 @@ type JsonTransfer struct {
 	Amount   float64 `json:"amount"`
 }
 
-func GenerateIban(countryCode string) string {
-	ibn, err := iban.Generate("BY")
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	return ibn
-}
-
 func newAccount(amount float64, currency string, user User, accountType AccountType,
-	accountStatus AccountStatus) *Account {
-	ibn := GenerateIban("BY")
+	accountStatus AccountStatus) (*Account, error) {
+	ibn, err := GenerateIban("BY")
+	if err != nil {
+		return nil, errors.New("ошибка генерация IBAN")
+	}
 	return &Account{
 		IBAN:          ibn,
 		Amount:        amount,
@@ -92,22 +86,23 @@ func newAccount(amount float64, currency string, user User, accountType AccountT
 		AccountStatus: accountStatus,
 		User:          user,
 		AccountType:   accountType,
-	}
+	}, nil
 }
 
-func OpenNewBankAccount(user User, amount float64) *Account {
-	newAccount := newAccount(amount, "BYN", user, Individual, Active)
+func GenerateIban(countryCode string) (string, error) {
+	ibn, err := iban.Generate(countryCode)
+	if err != nil {
+		return "", errors.New("ошибка генерация IBAN")
+	}
+
+	return ibn, nil
+}
+
+func OpenNewBankAccount(user User, amount float64, accountType AccountType, accountStatus AccountStatus) *Account {
+	newAccount, _ := newAccount(amount, "BYN", user, accountType, accountStatus)
 	bankAccounts = append(bankAccounts, newAccount)
 
 	return newAccount
-}
-
-func (account *Account) DisplayAccount() {
-	fmt.Printf("account = %+v\n", account)
-}
-
-func (user *User) DisplayUser() {
-	fmt.Printf("user = %+v\n", user)
 }
 
 func ShowEmissionAccountInfo() (string, error) {
@@ -222,8 +217,8 @@ func main() {
 	// инициализация специальных счетов
 	bankAdmin := User{LastName: "Иванов", FirstName: "Иван"}
 
-	emissionAccount := newAccount(100, "BYN", bankAdmin, Emission, Active)
-	destructionAccount := newAccount(0, "BYN", bankAdmin, Destruction, Active)
+	emissionAccount, _ := newAccount(100, "BYN", bankAdmin, Emission, Active)
+	destructionAccount, _ := newAccount(0, "BYN", bankAdmin, Destruction, Active)
 
 	bankAccounts = append(bankAccounts, emissionAccount)
 	bankAccounts = append(bankAccounts, destructionAccount)
@@ -252,31 +247,31 @@ func main() {
 		fmt.Printf("что-то пошло не так")
 	}
 
-	fmt.Printf("Добавлению на счет “эмиссии” указанной суммы (%f BYN):\n", emissionSum)
+	fmt.Printf("Добавление на счет “эмиссии” указанной суммы (%f BYN):\n", emissionSum)
 
 	// отправка определенной суммы денег с указанного счета на счет “уничтожения”
 	const destructionSum float64 = 21
 
 	_, errDestruction := MoneyTransferToDestruction(emissionAccountIban, destructionAccountIban, destructionSum)
 	if errDestruction != nil {
-		fmt.Printf("что-то пошло не так")
+		fmt.Println("Error:", errDestruction)
 	}
 
 	fmt.Printf("Отправка денег с указанного счета на счет “уничтожения” (%f BYN):\n", destructionSum)
 
 	// открытие нового счета
-	const account1Sum float64 = 100
-	const account2Sum float64 = 0
-	const account3Sum float64 = 40
+	const acc1Sum float64 = 100
+	const acc2Sum float64 = 0
+	const acc3Sum float64 = 40
 
-	account1 := OpenNewBankAccount(User{FirstName: "Василь", LastName: "Быков"}, account1Sum)
-	account2 := OpenNewBankAccount(User{FirstName: "Светлана", LastName: "Александровна"}, account2Sum)
-	account3 := OpenNewBankAccount(User{FirstName: "Линда", LastName: "Комарова"}, account3Sum)
+	account1 := OpenNewBankAccount(User{FirstName: "Василь", LastName: "Быков"}, acc1Sum, Individual, Active)
+	account2 := OpenNewBankAccount(User{FirstName: "Светлана", LastName: "Александровна"}, acc2Sum, Individual, Active)
+	account3 := OpenNewBankAccount(User{FirstName: "Линда", LastName: "Комарова"}, acc3Sum, LegalEntity, Blocked)
 
 	// перевод заданной суммы денег между двумя указанными счетами (с несколькими параметрами)
 	_, errTransfer := MoneyTransfer(account1.IBAN, account2.IBAN, 22)
 	if errTransfer != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("Error:", errTransfer)
 	}
 
 	// перевод заданной суммы денег между двумя указанными счетами (с единственным параметром в формате json)
@@ -288,12 +283,17 @@ func main() {
 
 	_, errTransferJson := MoneyTransferJson(transactionJson)
 	if errTransferJson != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("Error:", errTransferJson)
 	}
 
 	// вывод списка всех счетов
 	for _, s := range bankAccounts {
-		fmt.Printf("\n%s %s\n%s\n%f%s\n%s\n%s\n", s.User.LastName, s.User.FirstName, s.IBAN, s.Amount,
-			s.Currency, s.AccountStatus, s.AccountType)
+		marshal, marshalErr := json.MarshalIndent(s, "", "  ")
+
+		if marshalErr != nil {
+			fmt.Println("Error:", marshalErr)
+		}
+
+		fmt.Println(string(marshal))
 	}
 }
