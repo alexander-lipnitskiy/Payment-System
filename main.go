@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jacoelho/banking/iban"
 	"slices"
+	"sync"
 )
 
 type AccountType int
@@ -59,6 +60,7 @@ type User struct {
 }
 
 type Account struct {
+	sync.Mutex
 	IBAN          string        `json:"iban"`
 	Amount        float64       `json:"amount"`
 	Currency      string        `json:"currency"`
@@ -134,7 +136,11 @@ func MoneyTransferToEmission(ibanEmission string, amount float64) (bool, error) 
 		return false, errors.New("отправка денег на несуществующий эмисионный счет")
 	}
 
+	bankAccounts[idxTo].Lock()
+
 	bankAccounts[idxTo].Amount = bankAccounts[idxTo].Amount + amount
+
+	bankAccounts[idxTo].Unlock()
 
 	return true, nil
 }
@@ -157,8 +163,14 @@ func MoneyTransferToDestruction(ibanFrom string, ibanDestruction string, amount 
 		return false, errors.New("недостаточно средств")
 	}
 
+	bankAccounts[idxFrom].Lock()
+	bankAccounts[idxTo].Lock()
+
 	bankAccounts[idxFrom].Amount = bankAccounts[idxFrom].Amount - amount
 	bankAccounts[idxTo].Amount = bankAccounts[idxTo].Amount + amount
+
+	bankAccounts[idxFrom].Unlock()
+	bankAccounts[idxTo].Unlock()
 
 	return true, nil
 }
@@ -179,8 +191,14 @@ func MoneyTransfer(ibanFrom string, ibanTo string, amount float64) (bool, error)
 		return false, errors.New("недостаточно средств")
 	}
 
+	bankAccounts[idxFrom].Lock()
+	bankAccounts[idxTo].Lock()
+
 	bankAccounts[idxFrom].Amount = bankAccounts[idxFrom].Amount - amount
 	bankAccounts[idxTo].Amount = bankAccounts[idxTo].Amount + amount
+
+	bankAccounts[idxFrom].Unlock()
+	bankAccounts[idxTo].Unlock()
 
 	return true, nil
 }
@@ -207,8 +225,14 @@ func MoneyTransferJson(transactionJson []byte) (bool, error) {
 		return false, errors.New("недостаточно средств")
 	}
 
+	bankAccounts[idxFrom].Lock()
+	bankAccounts[idxTo].Lock()
+
 	bankAccounts[idxFrom].Amount = bankAccounts[idxFrom].Amount - jsonTransfer.Amount
 	bankAccounts[idxTo].Amount = bankAccounts[idxTo].Amount + jsonTransfer.Amount
+
+	bankAccounts[idxFrom].Unlock()
+	bankAccounts[idxTo].Unlock()
 
 	return true, nil
 }
